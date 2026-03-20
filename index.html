@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ひらがなれんしゅう">
+<title>ひらがなれんしゅう</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:#fffdf7;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif;display:flex;justify-content:center;align-items:flex-start;}
+  #app{width:100%;max-width:480px;padding:1.5rem 1.2rem;text-align:center;}
+
+  #score-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;font-size:15px;color:#888;}
+  #progress-bar-bg{height:10px;border-radius:99px;background:#e8e8e8;overflow:hidden;margin-bottom:1.8rem;}
+  #progress-bar-fill{height:10px;border-radius:99px;background:#e8658a;transition:width 0.4s;}
+
+  /* 音声ボタン */
+  #sound-area{margin:1rem 0 1.8rem;}
+  #sound-btn{
+    width:120px;height:120px;border-radius:50%;border:none;
+    background:linear-gradient(135deg,#FFE57A,#FFD840);
+    font-size:52px;cursor:pointer;
+    box-shadow:0 6px 20px rgba(255,200,0,0.35);
+    -webkit-tap-highlight-color:transparent;
+    transition:transform 0.1s, box-shadow 0.1s;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  #sound-btn:active{transform:scale(0.92);box-shadow:0 3px 10px rgba(255,200,0,0.3);}
+  #sound-btn.playing{animation:pulse 0.6s ease infinite alternate;}
+  @keyframes pulse{from{transform:scale(1);}to{transform:scale(1.08);}}
+  #sound-label{font-size:14px;color:#bbb;margin-top:10px;}
+
+  #prompt{font-size:16px;color:#888;margin-bottom:1.2rem;}
+
+  /* 4択 */
+  #choices{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.2rem;}
+  .choice-btn{
+    padding:18px 8px;font-size:42px;font-weight:700;
+    border:1.5px solid #ddd;border-radius:16px;
+    background:#fff;color:#222;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    transition:background 0.1s,border-color 0.1s;
+    line-height:1;
+  }
+  .choice-btn:active{background:#f0f0f0;}
+  .choice-btn.correct{background:#e8f5e0;border-color:#5aaa3a;color:#2d7a1a;}
+  .choice-btn.wrong{background:#fdecea;border-color:#e05a5a;color:#b02020;}
+  .choice-btn:disabled{cursor:default;}
+
+  #feedback{font-size:22px;font-weight:600;height:34px;margin-bottom:0.8rem;}
+  #next-btn{
+    display:none;padding:14px 40px;font-size:17px;font-weight:600;
+    border:1.5px solid #ddd;border-radius:12px;
+    background:#f5f5f5;color:#333;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #next-btn:active{background:#e8e8e8;}
+
+  #result{display:none;padding:2.5rem 1rem;}
+  #result h2{font-size:26px;font-weight:700;margin-bottom:0.8rem;color:#222;}
+  #result p{font-size:17px;color:#888;margin-bottom:2rem;line-height:1.7;white-space:pre-line;}
+  #retry-btn{
+    padding:14px 40px;font-size:17px;font-weight:600;
+    border:1.5px solid #ddd;border-radius:12px;
+    background:#f5f5f5;color:#333;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #retry-btn:active{background:#e8e8e8;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="score-bar">
+    <span>のこり <b id="remain-count">71</b> もじ</span>
+    <span id="score-display">⭐ 0</span>
+  </div>
+  <div id="progress-bar-bg"><div id="progress-bar-fill" style="width:0%"></div></div>
+
+  <div id="sound-area">
+    <button id="sound-btn" onclick="playCurrent()">🔊</button>
+    <div id="sound-label">おとを きいてね！</div>
+  </div>
+
+  <div id="prompt">どの ひらがな？</div>
+  <div id="choices"></div>
+  <div id="feedback"></div>
+  <button id="next-btn">つぎへ →</button>
+
+  <div id="result">
+    <h2 id="result-emoji"></h2>
+    <p id="result-msg"></p>
+    <button id="retry-btn">もういちど やる！</button>
+  </div>
+</div>
+
+<script>
+// ── 文字データ [ひらがな, 読み, グループID] ──────────────
+const SEION = [
+  ["あ","あ",0],["い","い",0],["う","う",0],["え","え",0],["お","お",0],
+  ["か","か",1],["き","き",1],["く","く",1],["け","け",1],["こ","こ",1],
+  ["さ","さ",2],["し","し",2],["す","す",2],["せ","せ",2],["そ","そ",2],
+  ["た","た",3],["ち","ち",3],["つ","つ",3],["て","て",3],["と","と",3],
+  ["な","な",4],["に","に",4],["ぬ","ぬ",4],["ね","ね",4],["の","の",4],
+  ["は","は",5],["ひ","ひ",5],["ふ","ふ",5],["へ","へ",5],["ほ","ほ",5],
+  ["ま","ま",6],["み","み",6],["む","む",6],["め","め",6],["も","も",6],
+  ["や","や",7],["ゆ","ゆ",7],["よ","よ",7],
+  ["ら","ら",8],["り","り",8],["る","る",8],["れ","れ",8],["ろ","ろ",8],
+  ["わ","わ",9],["を","を",9],["ん","ん",9]
+];
+const DAKUON = [
+  ["が","が",10],["ぎ","ぎ",10],["ぐ","ぐ",10],["げ","げ",10],["ご","ご",10],
+  ["ざ","ざ",11],["じ","じ",11],["ず","ず",11],["ぜ","ぜ",11],["ぞ","ぞ",11],
+  ["だ","だ",12],["ぢ","ぢ",12],["づ","づ",12],["で","で",12],["ど","ど",12],
+  ["ば","ば",13],["び","び",13],["ぶ","ぶ",13],["べ","べ",13],["ぼ","ぼ",13]
+];
+const HANDAKU = [
+  ["ぱ","ぱ",14],["ぴ","ぴ",14],["ぷ","ぷ",14],["ぺ","ぺ",14],["ぽ","ぽ",14]
+];
+const ALL = [...SEION, ...DAKUON, ...HANDAKU];
+const TOTAL = ALL.length;
+
+// ── ユーティリティ ────────────────────────────────────────
+function shuffle(a){ const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];} return b; }
+
+// 同グループ優先で3つの不正解選択肢
+function getWrongs(correctChar, groupId){
+  const sameGroup = ALL.filter(k => k[2]===groupId && k[0]!==correctChar);
+  let pool = shuffle(sameGroup);
+  if(pool.length < 3){
+    const others = shuffle(ALL.filter(k => k[0]!==correctChar && k[2]!==groupId));
+    pool = [...pool, ...others];
+  }
+  return pool.slice(0,3).map(k=>k[0]);
+}
+
+// ── 音声 ─────────────────────────────────────────────────
+function speakText(text, onend){
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang='ja-JP'; u.rate=0.75; u.pitch=1.4;
+  if(onend) u.onend = onend;
+  const btn = document.getElementById('sound-btn');
+  btn.classList.add('playing');
+  u.onend = ()=>{ btn.classList.remove('playing'); if(onend) onend(); };
+  window.speechSynthesis.speak(u);
+}
+
+function playCurrent(){
+  if(current) speakText(current[1]);
+}
+
+// ── ゲーム状態 ────────────────────────────────────────────
+let pool=[], cleared=0, score=0, current=null, answered=false;
+
+function init(){
+  pool = shuffle([...ALL]);
+  cleared=0; score=0; answered=false;
+  document.getElementById("score-display").textContent="⭐ 0";
+  document.getElementById("result").style.display="none";
+  document.getElementById("sound-area").style.display="block";
+  document.getElementById("prompt").style.display="block";
+  document.getElementById("choices").style.display="grid";
+  document.getElementById("feedback").style.display="block";
+  document.getElementById("next-btn").style.display="none";
+  updateBar();
+  next();
+}
+
+function updateBar(){
+  document.getElementById("progress-bar-fill").style.width=Math.round(cleared/TOTAL*100)+"%";
+  document.getElementById("remain-count").textContent=(TOTAL-cleared);
+}
+
+function next(){
+  if(pool.length===0){ showResult(); return; }
+  answered=false;
+  current=pool[Math.floor(Math.random()*pool.length)];
+  document.getElementById("feedback").textContent="";
+  document.getElementById("feedback").style.color="";
+  document.getElementById("next-btn").style.display="none";
+
+  // 選択肢を先に表示してから音声
+  const wrongs = getWrongs(current[0], current[2]);
+  const opts = shuffle([current[0], ...wrongs]);
+  const box = document.getElementById("choices");
+  box.innerHTML="";
+  opts.forEach(r=>{
+    const b=document.createElement("button");
+    b.className="choice-btn";
+    b.textContent=r;
+    b.addEventListener("click",()=>answer(b,r));
+    box.appendChild(b);
+  });
+
+  // 少し間を置いて自動読み上げ
+  setTimeout(()=>speakText(current[1]), 400);
+}
+
+function answer(btn, chosen){
+  if(answered) return;
+  answered=true;
+  const correct=current[0];
+  document.querySelectorAll(".choice-btn").forEach(b=>{
+    b.disabled=true;
+    if(b.textContent===correct) b.classList.add("correct");
+  });
+  const fb=document.getElementById("feedback");
+  if(chosen===correct){
+    score++;
+    document.getElementById("score-display").textContent="⭐ "+score;
+    fb.textContent="せいかい！🎉";
+    fb.style.color="#2d7a1a";
+    btn.classList.add("correct");
+    pool=pool.filter(k=>k[0]!==current[0]);
+    cleared++;
+    updateBar();
+    if(pool.length===0){ setTimeout(showResult,800); }
+    else{ setTimeout(next,900); }
+  } else {
+    fb.textContent="ざんねん…「"+correct+"」だよ！";
+    fb.style.color="#b02020";
+    btn.classList.add("wrong");
+    // 不正解時は正解音声を流す
+    speakText(current[1]);
+    document.getElementById("next-btn").style.display="inline-block";
+  }
+}
+
+document.getElementById("next-btn").addEventListener("click", next);
+
+function showResult(){
+  document.getElementById("sound-area").style.display="none";
+  document.getElementById("prompt").style.display="none";
+  document.getElementById("choices").style.display="none";
+  document.getElementById("feedback").style.display="none";
+  document.getElementById("next-btn").style.display="none";
+  document.getElementById("result").style.display="block";
+  document.getElementById("result-emoji").textContent="🏆 ぜんぶ せいかい！";
+  document.getElementById("result-msg").textContent=
+    "ひらがな "+TOTAL+" もじ ぜんぶ おぼえたね！\nすごい！（"+score+"かい こたえたよ）";
+}
+
+document.getElementById("retry-btn").addEventListener("click", init);
+init();
+</script>
+</body>
+</html>
