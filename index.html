@@ -137,12 +137,38 @@ function getWrongs(correctChar, groupId){
 }
 
 // ── 音声 ─────────────────────────────────────────────────
+// 女性の日本語音声を探して返す
+function getFemaleVoice(){
+  const voices = window.speechSynthesis.getVoices();
+  const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
+  // 女性っぽい名前キーワードで優先検索
+  const femaleKeywords = ['female','woman','kyoko','haruka','ichiro'.replace('ichiro',''), 'o-ren','nanami','sakura','mizuki','yu','ayumi'];
+  const female = jaVoices.find(v => femaleKeywords.some(k => v.name.toLowerCase().includes(k)));
+  // 見つからなければ日本語音声の最初のもの
+  return female || jaVoices[0] || null;
+}
+
+let selectedVoice = null;
+
+// 音声リストが読み込まれたらキャッシュ
+if(window.speechSynthesis){
+  window.speechSynthesis.onvoiceschanged = () => {
+    selectedVoice = getFemaleVoice();
+  };
+  // 即時でも試みる
+  selectedVoice = getFemaleVoice();
+}
+
 function speakText(text, onend){
   if(!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang='ja-JP'; u.rate=0.75; u.pitch=1.4;
-  if(onend) u.onend = onend;
+  u.lang = 'ja-JP';
+  u.rate = 0.75;
+  u.pitch = 1.5;
+  // 女性音声があればセット
+  const voice = selectedVoice || getFemaleVoice();
+  if(voice) u.voice = voice;
   const btn = document.getElementById('sound-btn');
   btn.classList.add('playing');
   u.onend = ()=>{ btn.classList.remove('playing'); if(onend) onend(); };
