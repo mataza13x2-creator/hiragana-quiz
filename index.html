@@ -125,15 +125,17 @@ const TOTAL = ALL.length;
 // ── ユーティリティ ────────────────────────────────────────
 function shuffle(a){ const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];} return b; }
 
-// 同グループ優先で3つの不正解選択肢
+// 清音は清音内、濁音は濁音内、半濁音はぱ行内でランダム
 function getWrongs(correctChar, groupId){
-  const sameGroup = ALL.filter(k => k[2]===groupId && k[0]!==correctChar);
-  let pool = shuffle(sameGroup);
-  if(pool.length < 3){
-    const others = shuffle(ALL.filter(k => k[0]!==correctChar && k[2]!==groupId));
-    pool = [...pool, ...others];
+  const isHandaku = HANDAKU.some(k => k[0]===correctChar);
+  const isDakuon  = DAKUON.some(k => k[0]===correctChar);
+  if(isHandaku){
+    return shuffle(HANDAKU.filter(k=>k[0]!==correctChar)).slice(0,3).map(k=>k[0]);
+  } else if(isDakuon){
+    return shuffle(DAKUON.filter(k=>k[0]!==correctChar)).slice(0,3).map(k=>k[0]);
+  } else {
+    return shuffle(SEION.filter(k=>k[0]!==correctChar)).slice(0,3).map(k=>k[0]);
   }
-  return pool.slice(0,3).map(k=>k[0]);
 }
 
 // ── 音声 ─────────────────────────────────────────────────
